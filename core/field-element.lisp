@@ -1,5 +1,5 @@
 (uiop:define-package :ed25519/core/field-element
-    (:use :cl :ed25519/core/raw)
+    (:use :cl :ed25519/core/low-level)
   (:export
    ;; data
    #:field-element
@@ -109,3 +109,18 @@
        :for i :below +fe-size+
        :do (setf (aref result i) (the int32 (aref h i)))
        :finally (return result))))
+
+(declaim (ftype (function (bytes) field-element) fe-from-bytes))
+(defun fe-from-bytes (in)
+  (let ((fe-ext (fe-ext)))
+    (setf (aref fe-ext 0) (loadint 4 in))
+    (setf (aref fe-ext 1) (<< (loadint 4 (subseq in 4)) 6 64))
+    (setf (aref fe-ext 2) (<< (loadint 3 (subseq in 7)) 5 64))
+    (setf (aref fe-ext 3) (<< (loadint 3 (subseq in 10)) 3 64))
+    (setf (aref fe-ext 4) (<< (loadint 3 (subseq in 13)) 2 64))
+    (setf (aref fe-ext 5) (loadint 4 (subseq in 16)))
+    (setf (aref fe-ext 6) (<< (loadint 3 (subseq in 20)) 7 64))
+    (setf (aref fe-ext 7) (<< (loadint 3 (subseq in 23)) 5 64))
+    (setf (aref fe-ext 8) (<< (loadint 3 (subseq in 26)) 4 64))
+    (setf (aref fe-ext 9) (<< (logand (loadint 3 (subseq in 29)) 8388607) 2 64))
+    (fe-combine fe-ext)))
