@@ -16,7 +16,7 @@
 
 (in-package :ed25519/core/field-element)
 
-(declaim (optimize speed (safety 0)))
+(declaim (optimize (speed 3) (safety 3)))
 
 
 
@@ -92,29 +92,43 @@
 (defun fe-combine (h)
   "Combine 64-bit coefficients resulting from multiplication of field elements
    into 32-bit representation by narrowing the range of each coefficient."
-  (let ((c (fe-ext)))
-    (declare (type field-element-ext c))
-    (setf (aref c 9) (>> (+ (aref c 9) (<< 1 24 64)) 25 64))
-    (decf (aref h 9) (<< (aref c 9) 25 64))
-    (incf (aref h 0) (the int64 (* (aref c 9) 19)))
-    (loop
-       :for i :below (1- +fe-size+)
-       :do (let* ((in (if (evenp i) 25 24))
-                  (out (1+ in)))
-             (setf (aref c i) (>> (+ (aref h i) (<< 1 in 64)) out 64))
-             (decf (aref h i) (<< (aref c i) out 64))
-             (incf (aref h (1+ i)) (aref c i))))
-    (loop
-       :with result :of-type field-element := (fe)
-       :for i :below +fe-size+
-       :do (setf (aref result i) (the int32 (aref h i)))
-       :finally (return result))))
+  (print h)
+  (loop
+     :with c :of-type field-element-ext := (fe-ext)
+     :for i :below (1- +fe-size+)
+     :do (let* ((shift (if (evenp i) 26 25)))
+           (setf (aref c i) (>> (+ (aref h i) (<< 1 (1- shift) 64)) shift 64))
+           (incf (aref h (1+ i)) (aref c i))
+           (decf (aref h i) (<< (aref c i) shift 64)))
+     :finally (progn
+                (setf (aref c 9) (>> (+ (aref h 9) (<< 1 24 64)) 25 64))
+                (incf (aref h 0) (* (the int32 (aref c 9)) 19))
+                (decf (aref h 9) (<< (aref c 9) 25 64))
+                (setf (aref c 0) (>> (+ (aref h 0) (<< 1 25 64)) 26 64))
+                (incf (aref h 1) (aref c 0))
+                (decf (aref h 0) (<< (aref c 0) 26 64))))
+  (loop
+     :with result :of-type field-element := (fe)
+     :for i :below +fe-size+
+     :do (setf (aref result i) (the int32 (aref h i)))
+     :finally (return result)))
+
+(declaim (ftype (function (field-element field-element int32)) fe-cmove))
+(defun fe-cmove (f g b)
+  "Destructively perform assignment f = if b == 1 then g else f
+   without revealing the value of b."
+  (loop
+     :with b :of-type int32 := (- b)
+     :for i :below +fe-size+
+     :for c := (logand b (logxor (aref f i) (aref g i)))
+     :do (setf (aref f i) (logxor (aref f i) c))))
 
 (declaim (ftype (function (bytes) field-element) fe-from-bytes))
 (defun fe-from-bytes (in)
+  "Deserialize field element from byte array."
   (let ((fe-ext (fe-ext)))
     (setf (aref fe-ext 0) (loadint 4 in))
-    (setf (aref fe-ext 1) (<< (loadint 4 (subseq in 4)) 6 64))
+    (setf (aref fe-ext 1) (<< (loadint 3 (subseq in 4)) 6 64))
     (setf (aref fe-ext 2) (<< (loadint 3 (subseq in 7)) 5 64))
     (setf (aref fe-ext 3) (<< (loadint 3 (subseq in 10)) 3 64))
     (setf (aref fe-ext 4) (<< (loadint 3 (subseq in 13)) 2 64))
@@ -124,3 +138,48 @@
     (setf (aref fe-ext 8) (<< (loadint 3 (subseq in 26)) 4 64))
     (setf (aref fe-ext 9) (<< (logand (loadint 3 (subseq in 29)) 8388607) 2 64))
     (fe-combine fe-ext)))
+
+(declaim (ftype (function (field-element) bytes) fe-to-bytes))
+(defun fe-to-bytes (h)
+  "Serialize field element to byte array."
+  (let ((h (fe-copy h)))
+    (loop :with q :of-type int32
+       := (>> (the int32 (+ (* 19 (aref h 9)) (<< 1 24 64))) 25 64)
+       :for i :below +fe-size+
+       :do (setf q (>> (+ q (aref h i)) (if (evenp i) 26 25) 32))
+       :finally (incf (aref h 0) (* 19 q)))
+    (loop :with carry :of-type field-element := (fe)
+       :for i :below (1- +fe-size+)
+       :do (let ((shift (if (evenp i) 26 25)))
+             (setf (aref carry i) (>> (aref h i) shift 32))
+             (incf (aref h (1+ i)) (aref carry i))
+             (decf (aref h i) (<< (aref carry i) shift 32)))
+       :finally (let ((i (1- +fe-size+))
+                      (shift 25))
+                  (setf (aref carry i) (>> (aref h i) shift 32))
+                  (decf (aref h i) (<< (aref carry i) shift 32))))
+    (loop
+       :with buf :of-type bytes := (make-array 32 :element-type '(unsigned-byte 8))
+       :with shift :of-type (unsigned-byte 5) := 0
+       :with i :of-type int32 := 0
+       :for k :below 32
+       :for bound :of-type int32 := (if (or (evenp i) (= i (1- +fe-size+))) 26 25)
+       :if (> (+ shift 8) bound)
+       :do (let* ((rshift (- bound shift))
+                  (left (>> (aref h i) shift 32)))
+             (if (= rshift 0)
+                 (setf shift 0)
+                 (let ((right (<< (aref h (1+ i)) rshift 32)))
+                   (setf (aref buf k) (mod (logior left right) 256))
+                   (setf shift (- 8 rshift))))
+             (setf i (1+ i)))
+       :else :if (= (+ shift 8) bound)
+       :do (progn
+             (setf (aref buf k) (mod (>> (aref h i) shift 32) 256))
+             (setf i (1+ i))
+             (setf shift 0))
+       :else
+       :do (let ((byte (mod (>> (aref h i) shift 32) 256)))
+             (setf (aref buf k) byte)
+             (setf shift (+ shift 8)))
+       :finally (return buf))))

@@ -12,7 +12,7 @@
 
 (in-package :ed25519/core/low-level)
 
-(declaim (optimize speed (safety 0)))
+(declaim (optimize (speed 3) (safety 0)))
 
 
 
@@ -29,7 +29,7 @@
 
 (declaim (ftype (function (int32 (unsigned-byte 5)) int32) shr32))
 (defun shr32 (n shift)
-  (the int32 (logand (ash n (- shift)) (1- (ash 1 32)))))
+  (the int32 (ash n (- shift))))
 
 (declaim (ftype (function (int64 (unsigned-byte 6)) int64) shl64))
 (defun shl64 (n shift)
@@ -37,7 +37,7 @@
 
 (declaim (ftype (function (int64 (unsigned-byte 6)) int64) shr64))
 (defun shr64 (n shift)
-  (the int64 (logand (ash n (- shift)) (1- (ash 1 64)))))
+  (the int64 (ash n (- shift))))
 
 (defmacro << (n shift width)
   (ecase width
