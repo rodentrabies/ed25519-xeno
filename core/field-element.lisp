@@ -12,11 +12,12 @@
    #:fe-sub
    #:fe-neg
    #:fe-from-bytes
-   #:fe-to-bytes))
+   #:fe-to-bytes
+   #:fe-mul))
 
 (in-package :ed25519/core/field-element)
 
-(declaim (optimize (speed 3) (safety 3)))
+(declaim (optimize (speed 3) (safety 0)))
 
 
 
@@ -183,3 +184,23 @@
              (setf (aref buf k) byte)
              (setf shift (+ shift 8)))
        :finally (return buf))))
+
+(declaim (ftype (function (field-element field-element) field-element) fe-mul))
+(defun fe-mul (f g)
+  "Compute h = f * g using schoolbook multiplication algorithm.
+   TODO:
+       1. doublings (`fc' values) and reductions (`gc' values) can
+          be precomputed as in Adam Langley's Go implementation;
+       2. deal with (mod (- i j) +fe-size+) expression warning."
+  (loop
+     :with h :of-type field-element-ext := (fe-ext)
+     :for i :below +fe-size+
+     :do (loop
+            :with hi :of-type int64 := 0
+            :for j :below +fe-size+
+            :for k := (mod (- i j) +fe-size+)
+            :for fc := (if (and (evenp i) (oddp j)) 2 1)
+            :for gc := (if (minusp (- i j)) 19 1)
+            :do (incf hi (the int64 (* fc (aref f j) gc (aref g k))))
+            :finally (setf (aref h i) hi))
+     :finally (return (fe-combine h))))
