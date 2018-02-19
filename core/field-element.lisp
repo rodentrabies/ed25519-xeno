@@ -11,9 +11,12 @@
    #:fe-add
    #:fe-sub
    #:fe-neg
+   #:fe-mul
+   #:fe-square
+   #:fe-double-square
+   ;; utils
    #:fe-from-bytes
-   #:fe-to-bytes
-   #:fe-mul))
+   #:fe-to-bytes))
 
 (in-package :ed25519/core/field-element)
 
@@ -93,7 +96,6 @@
 (defun fe-combine (h)
   "Combine 64-bit coefficients resulting from multiplication of field elements
    into 32-bit representation by narrowing the range of each coefficient."
-  (print h)
   (loop
      :with c :of-type field-element-ext := (fe-ext)
      :for i :below (1- +fe-size+)
@@ -204,3 +206,37 @@
             :do (incf hi (the int64 (* fc (aref f j) gc (aref g k))))
             :finally (setf (aref h i) hi))
      :finally (return (fe-combine h))))
+
+(declaim (ftype (function (field-element) field-element-ext) fe-square-ext))
+(defun fe-square-ext (f)
+  "Compute h = f * f, return result in extended field-element format.
+   NOTE: same as `fe-mul' implementation, as the only difference in
+         h1 = f*g and h2 = f*f is in the number of precomputations,
+         which are currently not implemented.
+   TODO: see TODO in `fe-mul'."
+  (loop
+     :with h :of-type field-element-ext := (fe-ext)
+     :for i :below +fe-size+
+     :do (loop
+            :with hi :of-type int64 := 0
+            :for j :below +fe-size+
+            :for k := (mod (- i j) +fe-size+)
+            :for fc1 := (if (and (evenp i) (oddp j)) 2 1)
+            :for fc2 := (if (minusp (- i j)) 19 1)
+            :do (incf hi (the int64 (* fc1 (aref f j) fc2 (aref f k))))
+            :finally (setf (aref h i) hi))
+     :finally (return h)))
+
+(declaim (ftype (function (field-element) field-element) fe-square))
+(defun fe-square (f)
+  "Compute h = f*f."
+  (fe-combine (fe-square-ext f)))
+
+(declaim (ftype (function (field-element) field-element) fe-double-square))
+(defun fe-double-square (f)
+  "Compute h = 2*f*f."
+  (loop
+     :with square :of-type field-element-ext := (fe-square-ext f)
+     :for i :below +fe-size+
+     :do (incf (aref square i) (aref square i))
+     :finally (return (fe-combine square))))
