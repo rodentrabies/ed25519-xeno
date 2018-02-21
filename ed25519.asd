@@ -1,5 +1,5 @@
 (defsystem :ed25519
-  :description "Common Lisp implementation of ECDSA based on curve25519"
+  :description "Common Lisp implementation of EdDSA based on curve25519"
   :version "0.0.1"
   :author "whythat <whythat@protonmail.com>"
 
