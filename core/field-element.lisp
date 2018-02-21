@@ -14,9 +14,11 @@
    #:fe-mul
    #:fe-square
    #:fe-double-square
+   #:fe-invert
    ;; utils
    #:fe-from-bytes
-   #:fe-to-bytes))
+   #:fe-to-bytes
+   #:fe-pow22523))
 
 (in-package :ed25519/core/field-element)
 
@@ -240,3 +242,52 @@
      :for i :below +fe-size+
      :do (incf (aref square i) (aref square i))
      :finally (return (fe-combine square))))
+
+(declaim (ftype (function (field-element int32) field-element) fe-square-times))
+(defun fe-square-times (f k)
+  "Compute h = f^(2^k) by squaring f k times."
+  (loop
+     :with result :of-type field-element := f
+     :for i :below k
+     :do (setf result (fe-square result))
+     :finally (return result)))
+
+(declaim (ftype (function (field-element) (values field-element &optional field-element)) pow22501))
+(defun fe-pow22501 (f)
+  "Compute a pair of values (f^(2^250 - 3), f^11), a smart trick
+   from `curve25519-dalek' implementation, which allows for simpler
+   `invert' and `pow22523' implementations by computing two main
+   intermediate results."
+  (let* ((t0  (fe-square f))               ; 1
+         (t1  (fe-square (fe-square t0)))  ; 3
+         (t2  (fe-mul f t1))               ; 3,0
+         (t3  (fe-mul t0 t2))              ; 3,1,0
+         (t4  (fe-square t3))              ; 4,2,1
+         (t5  (fe-mul t2 t4))              ; 4,3,2,1,0
+         (t6  (fe-square-times t5 5))      ; 9,8,7,6,5
+         (t7  (fe-mul t6 t5))              ; 9,8,7,6,5,4,3,2,1,0
+         (t8  (fe-square-times t7 10))     ; 19..10
+         (t9  (fe-mul t8 t7))              ; 19..0
+         (t10 (fe-square-times t9 20))     ; 39..20
+         (t11 (fe-mul t10 t9))             ; 39..0
+         (t12 (fe-square-times t11 10))    ; 49..10
+         (t13 (fe-mul t12 t7))             ; 49..0
+         (t14 (fe-square-times t13 50))    ; 99..50
+         (t15 (fe-mul t14 t13))            ; 99..0
+         (t16 (fe-square-times t15 100))   ; 199..100
+         (t17 (fe-mul t16 t15))            ; 199..0
+         (t18 (fe-square-times t17 50))    ; 249..50
+         (t19 (fe-mul t18 t13)))           ; 249..0
+    (values t19 t3)))
+
+(declaim (ftype (function (field-element) field-element) fe-invert))
+(defun fe-invert (f)
+  "Compute the inverse of field-element."
+  (multiple-value-bind (t19 t3) (fe-pow22501 f)
+    (fe-mul (fe-square-times t19 5) t3)))
+
+(declaim (ftype (function (field-element) field-element) fe-pow22523))
+(defun fe-pow22523 (f)
+  "Compute h = f^(2^252 - 3), which is used for group element encoding."
+  (let ((t19 (fe-pow22501 f)))
+    (fe-mul (fe-square-times t19 2) f)))
