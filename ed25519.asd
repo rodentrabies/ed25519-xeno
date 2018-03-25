@@ -6,5 +6,4 @@
   :class :package-inferred-system
   :pathname #P"./"
 
-  :depends-on (:ed25519/core/all
-               :ed25519/eddsa/all))
+  :depends-on (:ironclad :ed25519/core/all :ed25519/eddsa/all))
