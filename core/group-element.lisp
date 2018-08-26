@@ -137,7 +137,7 @@
 
 
 
-;;; Conversions to bytes
+;;; Conversions to/from bytes
 (declaim (ftype (function (projective-group-element) bytes) ge-to-bytes-projective))
 (defun ge-to-bytes-projective (p)
   (let* ((recip (fe-invert (projective-ge-z p)))
@@ -156,6 +156,30 @@
     (setf (aref buffer 31) (logxor (aref buffer 31) (ash (fe-negative? x) 7)))
     buffer))
 
+(declaim (ftype (function (bytes) extended-group-element) ge-from-bytes))
+(defun ge-from-bytes (buffer)
+  (let* ((y  (fe-from-bytes buffer))
+         (z  (fe-one))
+         (u  (fe-square y))
+         (v  (fe-mul u +d+))
+         (u  (fe-sub u z))
+         (v  (fe-add v z))
+         (v3 (fe-square v))
+         (v3 (fe-mul v3 v))
+         (x  (fe-square v3))
+         (x  (fe-mul x v))
+         (x  (fe-mul x u))
+         (x  (fe-pow22523 x))
+         (x  (fe-mul x v3))
+         (x  (fe-mul x u)))
+    ;; (let* ((vxx (fe-square x))
+    ;;        (vxx (fe-mul vxx v))
+    ;;        (check (fe-sub vxx u)))
+    ;;   ;; TODO(mrwhythat): implement safety check
+    ;;   )
+    (extended-group-element
+     :x (if (/= (fe-negative? x) (ash (aref buffer 31) -7)) (fe-neg x) x)
+     :y y :z z :tau (fe-mul x y))))
 
 
 
