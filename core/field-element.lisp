@@ -11,6 +11,8 @@
    #:fe-add
    #:fe-sub
    #:fe-neg
+   #:fe-negative?
+   #:fe-non-zero?
    #:fe-mul
    #:fe-square
    #:fe-double-square
@@ -93,6 +95,26 @@
      :for i :below +fe-size+
      :do (setf (aref result i) (- (aref a i)))
      :finally (return result)))
+
+(declaim (ftype (function (field-element) (unsigned-byte 8)) fe-negative?))
+(defun fe-negative? (a)
+  "Return 1 if field element is negative, 0 otherwise."
+  (logand (aref (fe-to-bytes a) 0) 1))
+
+(declaim (ftype (function (field-element) int32) fe-non-zero?))
+(defun fe-non-zero? (a)
+  "Constant-time check whether field element is non-zero."
+  (loop
+     :with buf :of-type bytes := (fe-to-bytes a)
+     :with x :of-type (unsigned-byte 8) := 0
+     :for b :below (length buf)
+     :do (setf x (logior x (aref buf b)))
+     :finally
+       (progn
+         (setf x (logior x (ash x -4)))
+         (setf x (logior x (ash x -2)))
+         (setf x (logior x (ash x -1)))
+         (return (logand x 1)))))
 
 (declaim (ftype (function (field-element-ext) field-element) fe-combine))
 (defun fe-combine (h)
