@@ -20,7 +20,12 @@
    ;; utils
    #:fe-from-bytes
    #:fe-to-bytes
-   #:fe-pow22523))
+   #:fe-pow22523
+   ;; constants
+   #:+d+
+   #:+2d+
+   #:+sqrt-minus-one+
+   #:+a+))
 
 (in-package :ed25519/core/field-element)
 
@@ -42,15 +47,21 @@
 (deftype field-element-ext () `(simple-array int64 (,+fe-size+)))
 
 
-(declaim (ftype (function () field-element) fe))
-(defun fe ()
-  "Create a new empty field element."
-  (make-array +fe-size+ :element-type 'int32))
+(defmacro fe (&rest es)
+  "Create a new field element, initialized with elements `es' if there
+   is exactly 10 of them."
+  (declare (list es))
+  (ecase (length es)
+    (0  `(make-array +fe-size+ :element-type 'int32))
+    (10 `(make-array +fe-size+ :element-type 'int32 :initial-contents ',es))))
 
-(declaim (ftype (function () field-element-ext) fe-ext))
-(defun fe-ext ()
-  "Create a new empty extended field element."
-  (make-array +fe-size+ :element-type 'int64))
+(defmacro fe-ext (&rest es)
+  "Create a new extended field element, initialized with elements `es' if there
+   is exactly 10 of them."
+  (declare (list es))
+  (ecase (length es)
+    (0  `(make-array +fe-size+ :element-type 'int64))
+    (10 `(make-array +fe-size+ :element-type 'int64 :initial-contents ',es))))
 
 (declaim (ftype (function () field-element) fe-zero))
 (defun fe-zero ()
@@ -313,3 +324,27 @@
   "Compute h = f^(2^252 - 3), which is used for group element encoding."
   (let ((t19 (fe-pow22501 f)))
     (fe-mul (fe-square-times t19 2) f)))
+
+
+
+
+;;; Constants that define specific insance of the group used by eddsa.
+(unless (boundp '+d+)
+  (defconstant +d+
+    (fe -10913610 13857413 -15372611 6949391 114729 -8787816 -6275908 -3247719 -18696448 -12055116)
+    "Constant field element d."))
+
+(unless (boundp '+2d+)
+  (defconstant +2d+
+    (fe -21827239 -5839606 -30745221 13898782 229458 15978800 -12551817 -6495438 29715968 9444199)
+    "Constant field element 2d."))
+
+(unless (boundp '+sqrt-minus-one+)
+  (defconstant +sqrt-minus-one+
+    (fe -32595792 -7943725 9377950 3500415 12389472 -272473 -25146209 -2005654 326686 11406482)
+    "Constant field element sqrt."))
+
+(unless (boundp '+a+)
+  (defconstant +a+
+    (fe 486662 0 0 0 0 0 0 0 0 0)
+    "Constant field element A."))
