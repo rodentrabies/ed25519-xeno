@@ -9,8 +9,20 @@
    #:completed-group-element
    #:precomputed-group-element
    #:cached-group-element
+   ;; data accessors
+   #:projective-ge-x
+   #:projective-ge-y
+   #:projective-ge-z
+   #:extended-ge-x
+   #:extended-ge-y
+   #:extended-ge-z
+   #:extended-ge-tau
    ;; operations
    ;; utils
+   #:sc-from-bytes
+   #:ge-from-bytes
+   #:ge-to-bytes-extended
+   #:ge-to-bytes-projective
    ))
 
 (in-package :ed25519/core/group-element)
