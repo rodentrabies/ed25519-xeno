@@ -116,7 +116,7 @@
 (defun fe-non-zero? (a)
   "Constant-time check whether field element is non-zero."
   (loop
-     :with buf :of-type bytes := (fe-to-bytes a)
+     :with buf :of-type (bytes *) := (fe-to-bytes a)
      :with x :of-type (unsigned-byte 8) := 0
      :for b :below (length buf)
      :do (setf x (logior x (aref buf b)))
@@ -161,7 +161,7 @@
      :for c := (logand b (logxor (aref f i) (aref g i)))
      :do (setf (aref f i) (logxor (aref f i) c))))
 
-(declaim (ftype (function (bytes) field-element) fe-from-bytes))
+(declaim (ftype (function ((bytes *)) field-element) fe-from-bytes))
 (defun fe-from-bytes (in)
   "Deserialize field element from byte array."
   (let ((fe-ext (fe-ext)))
@@ -177,7 +177,7 @@
     (setf (aref fe-ext 9) (<< (logand (loadint 3 (subseq in 29)) 8388607) 2 64))
     (fe-combine fe-ext)))
 
-(declaim (ftype (function (field-element) bytes) fe-to-bytes))
+(declaim (ftype (function (field-element) (bytes *)) fe-to-bytes))
 (defun fe-to-bytes (h)
   "Serialize field element to byte array."
   (let ((h (fe-copy h)))
@@ -197,7 +197,8 @@
                   (setf (aref carry i) (>> (aref h i) shift 32))
                   (decf (aref h i) (<< (aref carry i) shift 32))))
     (loop
-       :with buf :of-type bytes := (make-array 32 :element-type '(unsigned-byte 8))
+       :with buf :of-type (bytes *)
+         := (make-array 32 :element-type '(unsigned-byte 8))
        :with shift :of-type (unsigned-byte 5) := 0
        :with i :of-type int32 := 0
        :for k :below 32

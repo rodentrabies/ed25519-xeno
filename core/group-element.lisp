@@ -1,7 +1,8 @@
 (uiop:define-package :ed25519/core/group-element
     (:use :cl
+          :ed25519/core/low-level
           :ed25519/core/field-element
-          :ed25519/core/low-level)
+          :ed25519/core/scalar)
   (:export
    ;; data
    #:projective-group-element
@@ -18,12 +19,16 @@
    #:extended-ge-z
    #:extended-ge-tau
    ;; operations
+   #:ge-add
+   #:ge-sub
+   #:ge-mixed-add
+   #:ge-mixed-sub
+   #:ge-scalar-mul-base
+   #:ge-double-scalar-mul-vartime
    ;; utils
-   #:sc-from-bytes
    #:ge-from-bytes
    #:ge-to-bytes-extended
-   #:ge-to-bytes-projective
-   ))
+   #:ge-to-bytes-projective))
 
 (in-package :ed25519/core/group-element)
 
@@ -87,21 +92,25 @@
 
 (declaim (ftype (function () extended-group-element) ge-zero-extended))
 (defun ge-zero-extended ()
-  (extended-group-element :x (fe-zero) :y (fe-one) :z (fe-one) :tau (fe-zero)))
+  (extended-group-element
+   :x (fe-zero) :y (fe-one) :z (fe-one) :tau (fe-zero)))
 
 (declaim (ftype (function () precomputed-group-element) ge-zero-precomputed))
 (defun ge-zero-precomputed ()
-  (precomputed-group-element :yplusx (fe-one) :yminusx (fe-one) :xy2d (fe-zero)))
+  (precomputed-group-element
+   :yplusx (fe-one) :yminusx (fe-one) :xy2d (fe-zero)))
 
 
 
 
 ;;; Doubling operations
-(declaim (ftype (function (extended-group-element) completed-group-element) ge-double-extended))
+(declaim (ftype (function (extended-group-element) completed-group-element)
+                ge-double-extended))
 (defun ge-double-extended (p)
   (ge-double-projective (ge-extended-to-projective p)))
 
-(declaim (ftype (function (projective-group-element) completed-group-element) ge-double-projective))
+(declaim (ftype (function (projective-group-element) completed-group-element)
+                ge-double-projective))
 (defun ge-double-projective (p)
   (let* ((x (fe-square (projective-ge-x p)))
          (z (fe-square (projective-ge-y p)))
@@ -117,7 +126,8 @@
 
 
 ;;; Cross-representation conversions
-(declaim (ftype (function (extended-group-element) cached-group-element) ge-extended-to-cached))
+(declaim (ftype (function (extended-group-element) cached-group-element)
+                ge-extended-to-cached))
 (defun ge-extended-to-cached (p)
   (let* ((yplusx (fe-add (extended-ge-y p) (extended-ge-x p)))
          (yminusx (fe-sub (extended-ge-y p) (extended-ge-x p)))
@@ -125,21 +135,24 @@
          (t2d (fe-mul (extended-ge-tau p) +2d+)))
     (cached-group-element :yplusx yplusx :yminusx yminusx :z z :t2d t2d)))
 
-(declaim (ftype (function (extended-group-element) projective-group-element) ge-extended-to-projective))
+(declaim (ftype (function (extended-group-element) projective-group-element)
+                ge-extended-to-projective))
 (defun ge-extended-to-projective (p)
   (projective-group-element
    :x (fe-copy (extended-ge-x p))
    :y (fe-copy (extended-ge-y p))
    :z (fe-copy (extended-ge-z p))))
 
-(declaim (ftype (function (completed-group-element) projective-group-element) ge-completed-to-projective))
+(declaim (ftype (function (completed-group-element) projective-group-element)
+                ge-completed-to-projective))
 (defun ge-completed-to-projective (p)
   (let ((x (fe-mul (completed-ge-x p) (completed-ge-tau p)))
         (y (fe-mul (completed-ge-y p) (completed-ge-z p)))
         (z (fe-mul (completed-ge-z p) (completed-ge-tau p))))
     (projective-group-element :x x :y y :z z)))
 
-(declaim (ftype (function (completed-group-element) extended-group-element) ge-completed-to-extended))
+(declaim (ftype (function (completed-group-element) extended-group-element)
+                ge-completed-to-extended))
 (defun ge-completed-to-extended (p)
   (let ((x (fe-mul (completed-ge-x p) (completed-ge-tau p)))
         (y (fe-mul (completed-ge-y p) (completed-ge-z p)))
@@ -150,7 +163,8 @@
 
 
 ;;; Conversions to/from bytes
-(declaim (ftype (function (projective-group-element) bytes) ge-to-bytes-projective))
+(declaim (ftype (function (projective-group-element) (bytes *))
+                ge-to-bytes-projective))
 (defun ge-to-bytes-projective (p)
   (let* ((recip (fe-invert (projective-ge-z p)))
          (x (fe-mul (projective-ge-x p) recip))
@@ -159,7 +173,8 @@
     (setf (aref buffer 31) (logxor (aref buffer 31) (ash (fe-negative? x) 7)))
     buffer))
 
-(declaim (ftype (function (extended-group-element) bytes) ge-to-bytes-extended))
+(declaim (ftype (function (extended-group-element) (bytes *))
+                ge-to-bytes-extended))
 (defun ge-to-bytes-extended (p)
   (let* ((recip (fe-invert (extended-ge-z p)))
          (x (fe-mul (extended-ge-x p) recip))
@@ -168,7 +183,7 @@
     (setf (aref buffer 31) (logxor (aref buffer 31) (ash (fe-negative? x) 7)))
     buffer))
 
-(declaim (ftype (function (bytes) extended-group-element) ge-from-bytes))
+(declaim (ftype (function ((bytes *)) extended-group-element) ge-from-bytes))
 (defun ge-from-bytes (buffer)
   (let* ((y  (fe-from-bytes buffer))
          (z  (fe-one))
@@ -196,7 +211,9 @@
 
 
 ;;; Low-level operations
-(declaim (ftype (function (extended-group-element cached-group-element) completed-group-element) ge-add))
+(declaim (ftype (function (extended-group-element cached-group-element)
+                          completed-group-element)
+                ge-add))
 (defun ge-add (p q)
   (let* ((x   (fe-add (extended-ge-y p) (extended-ge-x p)))
          (y   (fe-sub (extended-ge-y p) (extended-ge-x p)))
@@ -211,7 +228,9 @@
          (tau (fe-sub t0 tau)))
     (completed-group-element :x x :y y :z z :tau tau)))
 
-(declaim (ftype (function (extended-group-element cached-group-element) completed-group-element) ge-sub))
+(declaim (ftype (function (extended-group-element cached-group-element)
+                          completed-group-element)
+                ge-sub))
 (defun ge-sub (p q)
   (let* ((x   (fe-add (extended-ge-y p) (extended-ge-x p)))
          (y   (fe-sub (extended-ge-y p) (extended-ge-x p)))
@@ -226,7 +245,8 @@
          (tau (fe-add t0 tau)))
     (completed-group-element :x x :y y :z z :tau tau)))
 
-(declaim (ftype (function (extended-group-element precomputed-group-element) completed-group-element)
+(declaim (ftype (function (extended-group-element precomputed-group-element)
+                          completed-group-element)
                 ge-mixed-add))
 (defun ge-mixed-add (p q)
   (let* ((x   (fe-add (extended-ge-y p) (extended-ge-x p)))
@@ -241,7 +261,8 @@
          (tau (fe-sub t0 tau)))
     (completed-group-element :x x :y y :z z :tau tau)))
 
-(declaim (ftype (function (extended-group-element precomputed-group-element) completed-group-element)
+(declaim (ftype (function (extended-group-element precomputed-group-element)
+                          completed-group-element)
                 ge-mixed-sub))
 (defun ge-mixed-sub (p q)
   (let* ((x   (fe-add (extended-ge-y p) (extended-ge-x p)))
@@ -255,3 +276,16 @@
          (z   (fe-sub t0 tau))
          (tau (fe-add t0 tau)))
     (completed-group-element :x x :y y :z z :tau tau)))
+
+(declaim (ftype (function (scalar) extended-group-element)
+                ge-scalar-mul-base))
+(defun ge-scalar-mul-base (s)
+  (declare (ignore s))
+  (error "not implemented"))
+
+(declaim (ftype (function (scalar extended-group-element scalar)
+                          projective-group-element)
+                ge-double-scalar-mul-vartime))
+(defun ge-double-scalar-mul-vartime (a h b)
+  (declare (ignore a h b))
+  (error "not implemented"))

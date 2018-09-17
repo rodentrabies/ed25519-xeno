@@ -35,7 +35,8 @@
     (ironclad:make-digest 'ironclad:sha512)
     (apply #'concatenate '(vector (unsigned-byte 8)) arrays))))
 
-(declaim (ftype (function (fixnum) (simple-array (unsigned-byte 8) *)) random-bytes))
+(declaim (ftype (function (fixnum) (simple-array (unsigned-byte 8) *))
+                random-bytes))
 (defun random-bytes (len)
   "Read and pack `len' random bytes from `/dev/urandom' to simple array."
   (let ((buffer (make-array len :element-type '(unsigned-byte 8))))
@@ -43,9 +44,11 @@
       (read-sequence buffer urandom))
     buffer))
 
-(declaim (ftype (function () (values secretkey &optional publickey)) generate-keys))
+(declaim (ftype (function () (values secretkey &optional publickey))
+                generate-keys))
 (defun generate-keys ()
-  "Generate random secret key `secret' and compute public key as SHA512(`secret')*G'."
+  "Generate random secret key `secret' and compute public key
+   as SHA512(`secret')*G'."
   (let* ((secret (random-bytes +secretkey-size+))
          (digest (sha512 secret)))
     (setf (aref digest 0) (logand (aref digest 0) 248))

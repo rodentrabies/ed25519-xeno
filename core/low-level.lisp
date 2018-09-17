@@ -20,7 +20,7 @@
 
 (deftype int64 () 'fixnum)
 
-(deftype bytes () '(simple-array (unsigned-byte 8) *))
+(deftype bytes (size) `(simple-array (unsigned-byte 8) ,size))
 
 
 (declaim (ftype (function (int32 (unsigned-byte 5)) int32) shl32))
@@ -49,7 +49,7 @@
     (32 `(shr32 ,n ,shift))
     (64 `(shr64 ,n ,shift))))
 
-(declaim (ftype (function ((unsigned-byte 3) bytes) int64) loadint))
+(declaim (ftype (function ((unsigned-byte 3) (bytes *)) int64) loadint))
 (defun loadint (n in)
   (loop
      :with r :of-type int64 := 0 
