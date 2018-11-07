@@ -7,8 +7,8 @@ over GF(2²⁵⁵ - 19).**
 The implementation heavily borrows from the following:
 
 - SUPERCOP reference ["ref10"][ref10] implementation;
-- @agl's Golang [ed25519][golang];
-- @isislovecruft's Rust [ed25519-dalek][rust].
+- Adam Langley's Golang [ed25519][golang];
+- @dalek-cryptography Rust [curve25519-dalek][cdalek]/[ed25519-dalek][edalek].
 
 ### Rationale
 
@@ -17,6 +17,12 @@ Common Lisp in the context of cryptographic algorithms, while
 the name is inspired partly by C++ [ed25519-donna][cpp] and 
 Rust [ed25519-dalek][rust] libraries and partly by the the xenomorphic
 look of those `(() ((())) () (())`:)
+
+### Disclaimer
+
+**This is untested/unreviewed implementation that absolutely should not be used
+for anything at all unless it's your new cryptocurrency because it's fun to
+watch those fail and it's twice as fun to watch those fail in Common Lisp.**
 
 ### TODO
 
@@ -27,10 +33,12 @@ operations are implemented:
 
 - [x] field element implementation;
 - [ ] group element implementation;
-- [ ] generate/sign/verify API.
+- [x] scalar implementation;
+- [x] generate/sign/verify API;
+- [ ] testing.
 
 [ref10]: https://bench.cr.yp.to/supercop.html
 [golang]: https://github.com/agl/ed25519
 [cpp]: https://github.com/floodyberry/ed25519-donna
-[rust]: https://github.com/isislovecruft/ed25519-dalek
-
+[cdalek]: https://github.com/dalek-cryptography/curve25519-dalek
+[edalek]: https://github.com/dalek-cryptography/ed25519-dalek
