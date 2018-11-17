@@ -20,6 +20,7 @@
    ;; utils
    #:fe-from-bytes
    #:fe-to-bytes
+   #:fe-cmove
    #:fe-pow22523
    ;; constants
    #:+d+

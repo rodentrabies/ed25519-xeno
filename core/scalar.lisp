@@ -8,7 +8,9 @@
    ;; operations
    #:sc-mul-add
    ;; utils
-   #:sc-from-bytes))
+   #:sc-from-bytes
+   ;; constants
+   #:+scalar-size+))
 
 (in-package :ed25519/core/scalar)
 

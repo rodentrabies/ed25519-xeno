@@ -280,13 +280,78 @@
          (tau (fe-add t0 tau)))
     (completed-group-element :x x :y y :z z :tau tau)))
 
+(declaim (ftype (function (precomputed-group-element
+                           precomputed-group-element
+                           int32))
+                ge-cmove-precomputed))
+(defun ge-cmove-precomputed (tau u b)
+  (fe-cmove (precomputed-ge-yplusx tau) (precomputed-ge-yplusx u) b)
+  (fe-cmove (precomputed-ge-yminusx tau) (precomputed-ge-yminusx u) b)
+  (fe-cmove (precomputed-ge-xy2d tau) (precomputed-ge-xy2d u) b))
+
+(declaim (ftype (function (int32 int32) precomputed-group-element)
+                select-point))
+(defun select-point (p b)
+  (let* ((tau  (ge-zero-precomputed))
+         (mtau (ge-zero-precomputed))
+         (bneg (logand (>> b 31 32) 1))
+         (babs (- b (<< (logand (- bneg) b) 1 32)))
+         (points
+          (the (simple-array precomputed-group-element (8)) (aref +base+ p))))
+    (loop
+       :for i :from 0 :below 8
+       :for e := (>> (1- (logxor babs (1+ i))) 31 32)
+       :do (setf tau (ge-cmove-precomputed tau (aref points i) e)))
+    (setf (precomputed-ge-yplusx mtau) (fe-copy (precomputed-ge-yminusx tau)))
+    (setf (precomputed-ge-yminusx mtau) (fe-copy (precomputed-ge-yplusx tau)))
+    (setf (precomputed-ge-xy2d mtau) (fe-copy (precomputed-ge-xy2d tau)))
+    (ge-cmove-precomputed tau mtau bneg)
+    tau))
+
 (declaim (ftype (function (scalar) extended-group-element)
                 ge-scalar-mul-base))
-(defun ge-scalar-mul-base (s)
-  "Compute H = s*B, where B is a base point for a given group
+(defun ge-scalar-mul-base (a)
+  "Compute H = a*B, where B is a base point for a given group
    i.e. a point (x, 4/5), x > 0."
-  (declare (ignore s))
-  (error "not implemented"))
+  (labels ()
+   (let ((e (make-array 64 :element-type '(unsigned-byte 8))))
+     (loop
+        :for i :below +scalar-size+
+        :for v := (aref a i)
+        :do (setf (aref e (* 2 i)) (logand v 15)
+                  (aref e (1+ (* 2 i))) (logand (>> v 4 8) 15)))
+     (loop
+        :with c := 0
+        :for i :below 64
+        :do (progn
+              (incf (aref e i) c)
+              (setf c (>> (+ (aref e i) 8) 4 8))
+              (decf (aref e i) (<< c 4 8)))
+        :finally (incf (aref e 63) c))
+     (let ((h (ge-zero-extended))
+           (p (ge-zero-precomputed))
+           (s (ge-zero-projective))
+           (r (completed-group-element
+               :x (fe-zero) :y (fe-zero) :z (fe-zero) :tau (fe-zero))))
+       (loop
+          :for i :from 1 :below 64 :by 2
+          :do (setf p (select-point (/ i 2) (the int32 (aref e i)))
+                    r (ge-mixed-add h p)
+                    h (ge-completed-to-extended r)))
+       (setf r (ge-double-extended h))
+       (setf s (ge-completed-to-projective r))
+       (setf r (ge-double-projective s))
+       (setf s (ge-completed-to-projective r))
+       (setf r (ge-double-projective s))
+       (setf s (ge-completed-to-projective r))
+       (setf r (ge-double-projective s))
+       (setf h (ge-completed-to-extended r))
+       (loop
+          :for i :from 0 :below 64 :by 2
+          :do (setf p (select-point (/ i 2) (the int32 (aref e i)))
+                    r (ge-mixed-add h p)
+                    h (ge-completed-to-extended r)))
+       h))))
 
 (declaim (ftype (function (scalar extended-group-element scalar)
                           projective-group-element)
@@ -347,10 +412,11 @@
        (fe -24326370 15950226 -31801215 -14592823 -11662737 -5090925 1573892 -2625887 2198790 -15804619)
        (fe -3099351 10324967 -2241613 7453183 -5446979 -2735503 -13812022 -16236442 -32461234 -12290683))))))
 
+
 (unless (boundp '+base+)
   (defconstant +base+
     (make-array
-     32 :element-type '(array precomputed-group-element (8))
+     32 :element-type '(simple-array precomputed-group-element (8))
      :initial-contents
      (list
       (make-array
