@@ -26,16 +26,11 @@ watch those fail and it's twice as fun to watch those fail in Common Lisp.**
 
 ### TODO
 
-Currently only field element operations are implemented. Edwards 
-representation group element implementation is under construction,
-while generate/sign/verify interface will be ready right after group
-operations are implemented:
-
 - [x] field element implementation;
-- [ ] group element implementation;
+- [x] group element implementation;
 - [x] scalar implementation;
 - [x] generate/sign/verify API;
-- [ ] testing.
+- [ ] warnings, debugging and testing.
 
 [ref10]: https://bench.cr.yp.to/supercop.html
 [golang]: https://github.com/agl/ed25519
