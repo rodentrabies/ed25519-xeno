@@ -57,7 +57,7 @@
 
 (defmacro >> (n shift width)
   (ecase width
-    (8  `(shl8  ,n ,shift))
+    (8  `(shr8  ,n ,shift))
     (32 `(shr32 ,n ,shift))
     (64 `(shr64 ,n ,shift))))
 

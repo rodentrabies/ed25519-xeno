@@ -202,11 +202,7 @@
          (x  (fe-pow22523 x))
          (x  (fe-mul x v3))
          (x  (fe-mul x u)))
-    ;; (let* ((vxx (fe-square x))
-    ;;        (vxx (fe-mul vxx v))
-    ;;        (check (fe-sub vxx u)))
-    ;;   ;; TODO(mrwhythat): implement safety check
-    ;;   )
+    ;; TODO(mrwhythat): implement safety check
     (extended-group-element
      :x (if (/= (fe-negative? x) (ash (aref buffer 31) -7)) (fe-neg x) x)
      :y y :z z :tau (fe-mul x y))))
@@ -353,12 +349,87 @@
                     h (ge-completed-to-extended r)))
        h))))
 
+(declaim (ftype (function (scalar) (simple-array int8 (256))) slide))
+(defun slide (a)
+  (let ((r (make-array 256 :element-type 'int8 :initial-element 0)))
+    ;; NOTE: for some reason, SBCL is unable to compile (>> i 3 8) and results
+    ;;       in a strange behaviour of incrementing i above 255 which fails
+    ;;       bounds check.
+    (loop
+       :for i :below 256
+       :do (setf (aref r i) (logand 1 (>> (aref a (ash i -3)) (logand i 7) 8))))
+    (loop
+       :for i :below 256
+       :when (not (zerop (aref r i)))
+       :do (loop
+              :for b :from 1 :to 6
+              :while (< (+ i b) 256)
+              :if (<= (+ (aref r i) (<< (aref r (+ i b)) b 8)) 15)
+              :do (progn
+                    (incf (aref r i) (<< (aref r (+ i b)) b 8))
+                    (setf (aref r (+ i b)) 0))
+              :else :if (>= (- (aref r i) (<< (aref r (+ i b)) b 8)) -15)
+              :do (progn
+                    (decf (aref r i) (<< (aref r (+ i b)) b 8))
+                    (loop
+                       :for k :from (+ i b) :below 256
+                       :if (zerop (aref r k))
+                       :do (progn
+                             (setf (aref r k) 1)
+                             (return))
+                       :else :do (setf (aref r k) 0)))
+              :else :do (return)))
+    r))
+
 (declaim (ftype (function (scalar extended-group-element scalar)
                           projective-group-element)
                 ge-double-scalar-mul-vartime))
 (defun ge-double-scalar-mul-vartime (a h b)
-  (declare (ignore a h b))
-  (error "not implemented"))
+  "Compute r = a*h + b*B, where a and b are scalars, h - a specified group
+   element, B - a predefined Ed25519 base point (x, 4/5), where x > 0."
+  (let ((ibreak 0)
+        (aslide (slide a))
+        (bslide (slide b))
+        (tau    (completed-group-element))
+        (u      (extended-group-element))
+        (a2     (extended-group-element))
+        (r      (ge-zero-projective))
+        (as     (make-array
+                 8 :element-type 'cached-group-element
+                 :initial-contents
+                 (loop :repeat 8 :collect (cached-group-element)))))
+    (setf (aref as 0) (ge-extended-to-cached h))
+    (setf tau         (ge-double-extended h))
+    (loop
+       :for i :below 7
+       :do (progn
+             (setf tau              (ge-add a2 (aref as i)))
+             (setf u                (ge-completed-to-extended tau))
+             (setf (aref as (1+ i)) (ge-extended-to-cached u))))
+    
+    (loop
+       :for i :downfrom 255 :to 0
+       :while (and (zerop (aref aslide i)) (zerop (aref bslide i)))
+       :finally (setf ibreak i))
+    (loop
+       :for i :downfrom ibreak :to 0
+       :do (progn
+             (setf tau (ge-double-projective r))
+             (setf u   (ge-completed-to-extended tau))
+             (setf tau
+                   (if (> (aref aslide i) 0)
+                       (ge-add u (aref as (/ (aref aslide i) 2)))
+                       (ge-sub u (aref as (/ (- (aref aslide i)) 2)))))
+
+             (setf u   (ge-completed-to-extended tau))
+             (setf tau
+                   (if (> (aref bslide i) 0)
+                       (ge-mixed-add u (aref as (/ (aref aslide i) 2)))
+                       (ge-mixed-sub u (aref as (/ (- (aref aslide i)) 2)))))
+             (setf r (ge-completed-to-projective tau))))
+    r))
+
+
 
 
 ;;;------------------------------------------------------------------------------
