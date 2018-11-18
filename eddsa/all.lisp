@@ -18,6 +18,11 @@
 
 (in-package :ed25519/eddsa/all)
 
+;; (declaim (optimize (speed 3) (safety 3)))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Data declarations
 
 (defconstant +secretkey-size+ 64)
 (defconstant +publickey-size+ 32)
@@ -26,8 +31,11 @@
 (deftype secretkey () `(simple-array (unsigned-byte 8) (,+secretkey-size+)))
 (deftype publickey () `(simple-array (unsigned-byte 8) (,+publickey-size+)))
 (deftype signature () `(simple-array (unsigned-byte 8) (,+signature-size+)))
+(deftype message   () '(simple-array (unsigned-byte 8) *))
 
-(deftype message () '(simple-array (unsigned-byte 8) *))
+
+;;;-----------------------------------------------------------------------------
+;;; Top-level API
 
 (defun sha512 (&rest arrays)
   (ironclad:produce-digest
@@ -53,7 +61,7 @@
          (digest (sha512 secret)))
     (setf (aref digest 0) (logand (aref digest 0) 248))
     (setf (aref digest 31) (logior (logand (aref digest 31) 127) 64))
-    (values secret (ge-to-bytes-extended (ge-scalar-mul-base digest)))))
+    (values secret (ge-to-bytes-extended (ge-scalar-mul-base (subseq digest 0 32))))))
 
 (declaim (ftype (function (secretkey message) signature) sign))
 (defun sign (secretkey message)
