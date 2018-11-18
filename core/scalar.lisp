@@ -16,6 +16,11 @@
 
 (declaim (optimize (speed 3) (safety 3)))
 
+
+
+;;;-----------------------------------------------------------------------------
+;;; Data types
+
 ;;; Scalars are integer values represented by 32-byte arrays in Galois
 ;;; field GF(l) where l = 2^252 + 27742317777372353535851937790883648493.
 
@@ -27,10 +32,12 @@
 (defmacro >>> (n shift) `(>> ,n ,shift 64))
 (defmacro <<< (n shift) `(<< ,n ,shift 64))
 
-(defconstant +pmask+ 2097151)
 
-(unless (boundp '+clist+)
-  (defconstant +clist+ '(666643 470296 654183 997805 136657 683901)))
+
+;;;------------------------------------------------------------------------------
+;;; Operations
+
+(defconstant +pmask+ 2097151)
 
 (declaim (ftype (function ((bytes (64))) scalar) sc-from-bytes))
 (defun sc-from-bytes (sbytes)
@@ -218,94 +225,99 @@
     (sc-encode s r)
     r))
 
+(declaim (type (simple-array int32 (6)) *clist*))
+(defvar *clist*
+  (make-array
+   6 :element-type 'int32
+   :initial-contents '(666643 470296 654183 997805 136657 683901)))
+
 (declaim (ftype (function ((simple-array int64) (simple-array int64)) (values))
                 sc-reduce))
 (defun sc-reduce (s carry)
   "Compute reduction of s modulo l."
-  (let ((coeffs (make-array 6 :element-type 'int32 :initial-contents +clist+)))
-    (loop
-       :for k :from 23 :downto 18
-       :do (loop
-              :for i :from 0 :to 5
-              :for c := (+ i k -12)
-              :do (case i
-                    ((3 5) (decf (aref s c)
-                                 (* (the int32 (aref s k))
-                                    (the int32 (aref coeffs i)))))
-                    (t (incf (aref s c)
-                             (* (the int32 (aref s k))
-                                (the int32 (aref coeffs i))))))
-              :finally (setf (aref s k) 0)))
-    (loop
-       :for i :from 6 :to 16 :by 2
-       :do (progn
-             (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (loop
-       :for i :from 7 :to 15 :by 2
-       :do (progn
-             (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (loop
-       :for k :from 17 :downto 12
-       :do (loop
-              :for i :from 0 :to 5
-              :for c := (+ i k -12)
-              :do (case i
-                    ((3 5) (decf (aref s c)
-                                 (* (the int32 (aref s k))
-                                    (the int32 (aref coeffs i)))))
-                    (t (incf (aref s c)
-                             (* (the int32 (aref s k))
-                                (the int32 (aref coeffs i))))))
-              :finally (setf (aref s k) 0)))
-    (loop
-       :for i :from 0 :to 10 :by 2
-       :do (progn
-             (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (loop
-       :for i :from 1 :to 11 :by 2
-       :do (progn
-             (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (loop
-       :for i :from 0 :to 5
-       :do (case i
-             ((3 5) (decf (aref s i)
-                          (* (the int32 (aref s 12))
-                             (the int32 (aref coeffs i)))))
-             (t (incf (aref s i)
-                      (* (the int32 (aref s 12))
-                         (the int32 (aref coeffs i))))))
-       :finally (setf (aref s 12) 0))
-    (loop
-       :for i :from 0 :to 11
-       :do (progn
-             (setf (aref carry i) (>>> (aref s i) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (loop
-       :for i :from 0 :to 5
-       :do (case i
-             ((3 5) (decf (aref s i)
-                          (* (the int32 (aref s 12))
-                             (the int32 (aref coeffs i)))))
-             (t (incf (aref s i)
-                      (* (the int32 (aref s 12))
-                         (the int32 (aref coeffs i))))))
-       :finally (setf (aref s 12) 0))
-    (loop
-       :for i :from 0 :to 10
-       :do (progn
-             (setf (aref carry i) (>>> (aref s i) 21))
-             (incf (aref s (1+ i)) (aref carry i))
-             (decf (aref s i) (<<< (aref carry i) 21))))
-    (values)))
+  (loop
+     :for k :from 23 :downto 18
+     :do (loop
+            :for i :from 0 :to 5
+            :for c := (+ i k -12)
+            :do (case i
+                  ((3 5) (decf (aref s c)
+                               (* (the int32 (aref s k))
+                                  (the int32 (aref *clist* i)))))
+                  (t (incf (aref s c)
+                           (* (the int32 (aref s k))
+                              (the int32 (aref *clist* i))))))
+            :finally (setf (aref s k) 0)))
+  (loop
+     :for i :from 6 :to 16 :by 2
+     :do (progn
+           (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (loop
+     :for i :from 7 :to 15 :by 2
+     :do (progn
+           (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (loop
+     :for k :from 17 :downto 12
+     :do (loop
+            :for i :from 0 :to 5
+            :for c := (+ i k -12)
+            :do (case i
+                  ((3 5) (decf (aref s c)
+                               (* (the int32 (aref s k))
+                                  (the int32 (aref *clist* i)))))
+                  (t (incf (aref s c)
+                           (* (the int32 (aref s k))
+                              (the int32 (aref *clist* i))))))
+            :finally (setf (aref s k) 0)))
+  (loop
+     :for i :from 0 :to 10 :by 2
+     :do (progn
+           (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (loop
+     :for i :from 1 :to 11 :by 2
+     :do (progn
+           (setf (aref carry i) (>>> (+ (aref s i) (<<< 1 20)) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (loop
+     :for i :from 0 :to 5
+     :do (case i
+           ((3 5) (decf (aref s i)
+                        (* (the int32 (aref s 12))
+                           (the int32 (aref *clist* i)))))
+           (t (incf (aref s i)
+                    (* (the int32 (aref s 12))
+                       (the int32 (aref *clist* i))))))
+     :finally (setf (aref s 12) 0))
+  (loop
+     :for i :from 0 :to 11
+     :do (progn
+           (setf (aref carry i) (>>> (aref s i) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (loop
+     :for i :from 0 :to 5
+     :do (case i
+           ((3 5) (decf (aref s i)
+                        (* (the int32 (aref s 12))
+                           (the int32 (aref *clist* i)))))
+           (t (incf (aref s i)
+                    (* (the int32 (aref s 12))
+                       (the int32 (aref *clist* i))))))
+     :finally (setf (aref s 12) 0))
+  (loop
+     :for i :from 0 :to 10
+     :do (progn
+           (setf (aref carry i) (>>> (aref s i) 21))
+           (incf (aref s (1+ i)) (aref carry i))
+           (decf (aref s i) (<<< (aref carry i) 21))))
+  (values))
 
 
 (declaim (ftype (function ((simple-array int64) scalar) (values)) sc-encode))

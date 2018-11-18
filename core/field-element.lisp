@@ -34,6 +34,9 @@
 
 
 
+;;;------------------------------------------------------------------------------
+;;; Data types
+
 ;; Constant `+fe-size+' is the size of int32 array, that is used
 ;; to represent field elements.
 (defconstant +fe-size+ 10)
@@ -46,7 +49,6 @@
 ;; Type `field-element-ext' represents intermediary field-element value which
 ;; is a result of some of the operations (i.e. multiplication).
 (deftype field-element-ext () `(simple-array int64 (,+fe-size+)))
-
 
 (defmacro fe (&rest es)
   "Create a new field element, initialized with elements `es' if there
@@ -63,6 +65,11 @@
   (ecase (length es)
     (0  `(make-array +fe-size+ :element-type 'int64))
     (10 `(make-array +fe-size+ :element-type 'int64 :initial-contents ',es))))
+
+
+
+;;;------------------------------------------------------------------------------
+;;; Operations
 
 (declaim (ftype (function () field-element) fe-zero))
 (defun fe-zero ()
@@ -329,8 +336,9 @@
 
 
 
+;;;-----------------------------------------------------------------------------
+;;; Constants
 
-;;; Constants that define specific insance of the group used by eddsa.
 (unless (boundp '+d+)
   (defconstant +d+
     (fe -10913610 13857413 -15372611 6949391 114729 -8787816 -6275908 -3247719 -18696448 -12055116)
