@@ -35,7 +35,7 @@
 
 (in-package :ed25519/core/group-element)
 
-(declaim (optimize (speed 3) (safety 3)))
+(declaim (optimize (speed 3) (safety 0)))
 
 
 
@@ -1769,7 +1769,7 @@
     (loop
        :for i :from 0 :below 8
        :for e := (>> (1- (logxor babs (1+ i))) 31 32)
-       :do (setf tau (ge-cmove-precomputed tau (aref points i) e)))
+       :do (ge-cmove-precomputed tau (aref points i) e))
     (setf (precomputed-ge-yplusx mtau) (fe-copy (precomputed-ge-yminusx tau)))
     (setf (precomputed-ge-yminusx mtau) (fe-copy (precomputed-ge-yplusx tau)))
     (setf (precomputed-ge-xy2d mtau) (fe-copy (precomputed-ge-xy2d tau)))
@@ -1781,45 +1781,44 @@
 (defun ge-scalar-mul-base (a)
   "Compute H = a*B, where B is a base point for a given group
    i.e. a point (x, 4/5), x > 0."
-  (labels ()
-   (let ((e (make-array 64 :element-type '(unsigned-byte 8))))
-     (loop
-        :for i :below +scalar-size+
-        :for v := (aref a i)
-        :do (setf (aref e (* 2 i)) (logand v 15)
-                  (aref e (1+ (* 2 i))) (logand (>> v 4 8) 15)))
-     (loop
-        :with c := 0
-        :for i :below 64
-        :do (progn
-              (incf (aref e i) c)
-              (setf c (>> (+ (aref e i) 8) 4 8))
-              (decf (aref e i) (<< c 4 8)))
-        :finally (incf (aref e 63) c))
-     (let ((h (ge-zero-extended))
-           (p (ge-zero-precomputed))
-           (s (ge-zero-projective))
-           (r (completed-group-element
-               :x (fe-zero) :y (fe-zero) :z (fe-zero) :tau (fe-zero))))
-       (loop
-          :for i :from 1 :below 64 :by 2
-          :do (setf p (select-point (/ i 2) (the int32 (aref e i)))
-                    r (ge-mixed-add h p)
-                    h (ge-completed-to-extended r)))
-       (setf r (ge-double-extended h))
-       (setf s (ge-completed-to-projective r))
-       (setf r (ge-double-projective s))
-       (setf s (ge-completed-to-projective r))
-       (setf r (ge-double-projective s))
-       (setf s (ge-completed-to-projective r))
-       (setf r (ge-double-projective s))
-       (setf h (ge-completed-to-extended r))
-       (loop
-          :for i :from 0 :below 64 :by 2
-          :do (setf p (select-point (/ i 2) (the int32 (aref e i)))
-                    r (ge-mixed-add h p)
-                    h (ge-completed-to-extended r)))
-       h))))
+  (let ((e (make-array 64 :element-type '(unsigned-byte 8))))
+    (loop
+       :for i :below +scalar-size+
+       :for v := (aref a i)
+       :do (setf (aref e (* 2 i)) (logand v 15)
+                 (aref e (1+ (* 2 i))) (logand (>> v 4 8) 15)))
+    (loop
+       :with c :of-type (unsigned-byte 8) := 0
+       :for i :below 64
+       :do (progn
+             (incf (aref e i) c)
+             (setf c (>> (+ (aref e i) 8) 4 8))
+             (decf (aref e i) (<< c 4 8)))
+       :finally (incf (aref e 63) c))
+    (let ((h (ge-zero-extended))
+          (p (ge-zero-precomputed))
+          (s (ge-zero-projective))
+          (r (completed-group-element
+              :x (fe-zero) :y (fe-zero) :z (fe-zero) :tau (fe-zero))))
+      (loop
+         :for i :from 1 :below 64 :by 2
+         :do (setf p (select-point (ash i -1) (the int32 (aref e i)))
+                   r (ge-mixed-add h p)
+                   h (ge-completed-to-extended r)))
+      (setf r (ge-double-extended h))
+      (setf s (ge-completed-to-projective r))
+      (setf r (ge-double-projective s))
+      (setf s (ge-completed-to-projective r))
+      (setf r (ge-double-projective s))
+      (setf s (ge-completed-to-projective r))
+      (setf r (ge-double-projective s))
+      (setf h (ge-completed-to-extended r))
+      (loop
+         :for i :from 0 :below 64 :by 2
+         :do (setf p (select-point (/ i 2) (the int32 (aref e i)))
+                   r (ge-mixed-add h p)
+                   h (ge-completed-to-extended r)))
+      h)))
 
 (declaim (ftype (function (scalar) (simple-array int8 (256))) slide))
 (defun slide (a)
@@ -1880,13 +1879,13 @@
         (as     (copy-seq *gelist*)))
     (setf (aref as 0) (ge-extended-to-cached h))
     (setf tau         (ge-double-extended h))
+    (setf a2          (ge-completed-to-extended tau))
     (loop
        :for i :below 7
        :do (progn
              (setf tau              (ge-add a2 (aref as i)))
              (setf u                (ge-completed-to-extended tau))
              (setf (aref as (1+ i)) (ge-extended-to-cached u))))
-    
     (loop
        :for i :downfrom 255 :to 0
        :while (and (zerop (aref aslide i)) (zerop (aref bslide i)))
@@ -1898,13 +1897,12 @@
              (setf u   (ge-completed-to-extended tau))
              (setf tau
                    (if (> (aref aslide i) 0)
-                       (ge-add u (aref as (/ (aref aslide i) 2)))
-                       (ge-sub u (aref as (/ (- (aref aslide i)) 2)))))
-
+                       (ge-add u (aref as (ash (aref aslide i) -1)))
+                       (ge-sub u (aref as (ash (- (aref aslide i)) -1)))))
              (setf u   (ge-completed-to-extended tau))
              (setf tau
                    (if (> (aref bslide i) 0)
-                       (ge-mixed-add u (aref as (/ (aref aslide i) 2)))
-                       (ge-mixed-sub u (aref as (/ (- (aref aslide i)) 2)))))
+                       (ge-mixed-add u (aref as (ash (aref bslide i) -1)))
+                       (ge-mixed-sub u (aref as (ash (- (aref bslide i)) -1)))))
              (setf r (ge-completed-to-projective tau))))
     r))

@@ -83,7 +83,7 @@
 (defun verify (publickey message signature)
   "Verify a `signature' for a given `message' with respect to `publickey'."
   (let ((a (ge-from-bytes publickey)))
-    (when (and a (not (zerop (logand (aref signature 63) 224))))
+    (when (and a (zerop (logand (aref signature 63) 224)))
       (setf (extended-ge-x a) (fe-neg (extended-ge-x a)))
       (setf (extended-ge-tau a) (fe-neg (extended-ge-tau a)))
       (let* ((e-bytes (subseq signature 0 32))
@@ -93,7 +93,7 @@
              (r-bytes (ge-to-bytes-projective r)))
         (and (= (length e-bytes) (length r-bytes))
              (zerop
-              (reduce  ; constant time comparison of byte arrays 
+              (reduce ;; constant time comparison of byte arrays
                (lambda (v a.b) (logior v (logxor (car a.b) (cdr a.b))))
                (map 'list #'cons e-bytes r-bytes)
                :initial-value 0)))))))
